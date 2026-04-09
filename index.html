@@ -915,7 +915,7 @@
     }
 
     let soundLevel = 0, robotMoving = false, moveTimer = 0;
-    let robotX = 0, robotZ = 0, robotVx = 0, robotVz = 0, robotAng = 0;
+    let robotX = 0, robotZ = 0, robotVx = 0, robotVz = 0, robotAng = -Math.PI / 2;
     let clapFlash = 0, speakerAlpha = 0;
     const speakerPos = new THREE.Vector3();
     const NB = 14;
@@ -1016,7 +1016,7 @@
         dist = Math.sqrt(robotVx * robotVx + robotVz * robotVz);
         const wheelSpin = dist / 1.9;
         if (wl) wl.rotation.x -= wheelSpin;
-        if (wr) wr.rotation.x += wheelSpin;
+        if (wr) wr.rotation.x -= wheelSpin;
         const lim = 8;
         if (Math.abs(robotX) > lim) { robotVx *= -1; robotX = Math.sign(robotX) * lim; }
         if (Math.abs(robotZ) > lim) { robotVz *= -1; robotZ = Math.sign(robotZ) * lim; }
@@ -1041,7 +1041,7 @@
       }
       chassis.position.x = robotX;
       chassis.position.z = robotZ;
-      chassis.rotation.y = -robotAng;
+      chassis.rotation.y = -robotAng - Math.PI / 2;
       soundLevel *= 0.93;
       if (soundLevel < 2) soundLevel = 0;
       clapFlash *= 0.95;
@@ -1147,7 +1147,7 @@
         servoR.position.lerpVectors(ASSEMBLY_POS.servoR, new THREE.Vector3(6.8, 1.2, 0), e);
         resistor.position.lerpVectors(ASSEMBLY_POS.resistor, new THREE.Vector3(0.3, 1.2, -2.0), e);
         const wl = chassis.getObjectByName('wheelL'), wr = chassis.getObjectByName('wheelR');
-        if (s === 14 && wl && wr) { wl.rotation.x += 0.08; wr.rotation.x += 0.08; }
+        if (s === 14 && wl && wr) { wl.rotation.x -= 0.08; wr.rotation.x -= 0.08; }
       }
       if (s === 16 && !confettiDone) {
         confettiDone = true;
