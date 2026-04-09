@@ -1,0 +1,1232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Clap Sensing Robot — 3D Build Simulation</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #eef1f6;
+                 font-family: 'Outfit', sans-serif; color: #1e293b; }
+
+    #viewport {
+      position: fixed; top: 0; left: 0; right: 0;
+    }
+    #viewport canvas { display: block; width: 100% !important; height: 100% !important; }
+
+    #labels { position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+              pointer-events: none; z-index: 10; }
+
+    .lbl3d {
+      position: absolute;
+      background: rgba(255, 255, 255, 0.93);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(0, 0, 0, 0.09);
+      border-radius: 7px;
+      padding: 4px 10px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 600;
+      color: #1d4ed8;
+      white-space: nowrap;
+      pointer-events: none;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.10);
+      transform: translate(-50%, -110%);
+      transition: opacity 0.25s ease;
+    }
+    .lbl3d::after {
+      content: '';
+      position: absolute;
+      bottom: -6px; left: 50%;
+      transform: translateX(-50%);
+      border: 6px solid transparent;
+      border-top-color: rgba(255, 255, 255, 0.93);
+    }
+    .lbl3d.sub {
+      font-size: 9px;
+      color: #64748b;
+      background: rgba(241, 245, 249, 0.95);
+      border-color: rgba(0,0,0,0.06);
+    }
+
+    .bar {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 20;
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      border-top: 1px solid rgba(0,0,0,0.08);
+      padding: 12px 16px max(12px, env(safe-area-inset-bottom)) 16px;
+    }
+    .bar-inner { max-width: 620px; margin: 0 auto; }
+    .dots { display: flex; gap: 3px; justify-content: center; margin-bottom: 8px; }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(0,0,0,0.08); transition: all .3s; }
+    .dot.done { background: #10b981; }
+    .dot.active { background: #3b82f6; width: 16px; border-radius: 3px; }
+    .bar-text { font-size: 15px; line-height: 1.6; text-align: center;
+                margin-bottom: 12px; min-height: 48px; color: #334155; }
+    .bar-text b { color: #1d4ed8; }
+    .bar-text .g { color: #059669; }
+    .bar-text .r { color: #dc2626; }
+    .bar-text .y { color: #d97706; }
+    .bar-btns { display: flex; gap: 8px; }
+    .btn { height: 52px; border-radius: 12px; border: none; font-family: 'Outfit', sans-serif;
+           font-weight: 700; font-size: 15px; cursor: pointer;
+           display: flex; align-items: center; justify-content: center;
+           gap: 6px; transition: all .12s; padding: 0 20px; }
+    .btn:active { transform: scale(0.95); }
+    .btn-p { background: linear-gradient(135deg, #3b82f6, #2563eb); color: #fff;
+             flex: 1; box-shadow: 0 2px 8px rgba(59,130,246,0.3); }
+    .btn-s { background: #f1f5f9; color: #64748b; width: 52px; padding: 0;
+             font-size: 20px; border: 1px solid #e2e8f0; }
+    .btn-clap { background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff;
+                flex: 1; font-size: 18px;
+                box-shadow: 0 2px 12px rgba(239,68,68,0.3);
+                animation: pc 1.8s infinite; }
+    @keyframes pc {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.35); }
+      50% { box-shadow: 0 0 0 14px rgba(239,68,68,0); }
+    }
+    .btn-clap:active { transform: scale(0.9); }
+
+    .meter { position: fixed; top: max(10px, env(safe-area-inset-top)); left: 50%;
+             transform: translateX(-50%); z-index: 20;
+             display: none; align-items: center; gap: 8px;
+             background: rgba(255,255,255,0.92); backdrop-filter: blur(12px);
+             border: 1px solid rgba(0,0,0,0.06); border-radius: 14px;
+             padding: 8px 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+    .meter.show { display: flex; }
+    .m-bars { display: flex; gap: 2px; align-items: flex-end; height: 24px; }
+    .m-bar { width: 3px; border-radius: 1.5px; background: #10b981; transition: height .06s; }
+    .m-val { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600;
+             min-width: 32px; text-align: right; color: #334155; }
+    .m-st { font-size: 10px; font-weight: 800; letter-spacing: .6px;
+            padding: 3px 8px; border-radius: 5px; }
+    .m-st.idle { background: #ecfdf5; color: #059669; }
+    .m-st.mov { background: #fef2f2; color: #dc2626; }
+
+    .code-pop {
+      position: fixed;
+      top: 54%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.92);
+      width: min(92vw, 620px);
+      background: rgba(12, 18, 34, 0.96);
+      color: #cbd5e1;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 16px;
+      box-shadow: 0 12px 42px rgba(15, 23, 42, 0.45), 0 0 26px rgba(56, 189, 248, 0.2);
+      z-index: 30;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .28s ease, transform .28s ease;
+      overflow: hidden;
+    }
+    .code-pop.show {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+    .cp-head {
+      height: 40px;
+      padding: 0 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #0f172a;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: #93c5fd;
+    }
+    .cp-dots { display: flex; gap: 8px; }
+    .cp-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .cp-body {
+      padding: 14px 16px 16px;
+      min-height: 220px;
+      max-height: 46vh;
+      overflow: auto;
+      white-space: pre;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      line-height: 1.6;
+      color: #cbd5e1;
+    }
+  </style>
+</head>
+<body>
+  <div id="viewport"></div>
+  <div id="labels"></div>
+
+  <div class="meter" id="meter">
+    <div class="m-bars" id="mB"></div>
+    <div class="m-val" id="mV">0</div>
+    <div class="m-st idle" id="mS">IDLE</div>
+  </div>
+
+  <div class="bar">
+    <div class="bar-inner">
+      <div class="dots" id="dots"></div>
+      <div class="bar-text" id="txt">Loading...</div>
+      <div class="bar-btns" id="btns"></div>
+    </div>
+  </div>
+
+  <div class="code-pop" id="codePop">
+    <div class="cp-head">
+      <span>sketch.ino - Arduino IDE</span>
+      <div class="cp-dots">
+        <span class="cp-dot" style="background:#ff5f57"></span>
+        <span class="cp-dot" style="background:#febc2e"></span>
+        <span class="cp-dot" style="background:#28c840"></span>
+      </div>
+    </div>
+    <div class="cp-body" id="codeBody"></div>
+  </div>
+
+  <script>
+    const maxStep = 16;
+    const steps = [
+      { l: 'Welcome',       t: 'Build a <b>Clap-Sensing Robot</b> that hears you clap and drives forward! Tap <b>Next</b> to begin.' },
+      { l: 'Breadboard',    t: '<b>Breadboard</b> - 400 solderless tie-points. Rows a–e and f–j connect horizontally inside.' },
+      { l: 'Placing',       t: 'Breadboard placed as the <b>circuit foundation</b>. All components plug in here.' },
+      { l: 'Arduino Uno R3',t: '<b>Arduino Uno R3</b> - ATmega328P brain running at 16MHz. Reads sensors and controls motors.' },
+      { l: 'Wiring Power',  t: 'Arduino connected! <span class="r">5V</span> and <span class="g">GND</span> rails now power the breadboard.' },
+      { l: 'Sound Sensor',  t: '<b>KY-038 Sound Sensor</b> - electret mic + LM393 comparator. Outputs 0–1023 analog signal.' },
+      { l: 'Wiring Sensor', t: 'Sensor wired: <span class="r">VCC → 5V</span>, GND → GND, <b>A0 → Pin A0</b> (analog signal).' },
+      { l: 'Servo Motors',  t: '<b>SG90 Micro Servos</b> (×2) - continuous rotation wheels. PWM: 0°=CW, 90°=Stop, 180°=CCW.' },
+      { l: 'Wiring Servos', t: 'Left servo → <b>Pin 9</b>, Right → <b>Pin 10</b>. <span class="r">Red</span>=5V, Brown=GND, <span class="y">Orange</span>=Signal.' },
+      { l: 'LED + Resistor', t: '<b>5mm Green LED</b> + <b>220Ω Resistor</b> (Red-Red-Brown-Gold). Visual clap feedback.' },
+      { l: 'Wiring LED',    t: 'Anode → 220Ω resistor → <b>Pin 7</b>. Cathode → GND. Lights up on clap!' },
+      { l: 'Battery Pack',  t: '<b>4×AA Battery Holder</b> (6V total). Red wire = positive, Black wire = negative.' },
+      { l: 'Power On!',     t: 'Battery connected: <span class="r">+6V → Vin</span>, Black → GND. Circuit is <b>complete</b>! ⚡' },
+      { l: 'The Code',      t: '<span class="g">analogRead(A0)</span> > 500 → Clap detected! LED ON, servos spin 2 seconds, then stop.' },
+      { l: 'Robot Ready',   t: 'Everything mounted on the 2WD chassis with wheels. Your <b>Clap Robot</b> is ready! 🤖' },
+      { l: 'Test It!',      t: 'Tap <b>👏 CLAP!</b> or press <b>Spacebar</b>. Listen for the clap sound and watch the robot move!' },
+      { l: 'Complete! 🎉',  t: 'You built a working clap-sensing robot! Try adjusting the threshold or adding more sensors.' },
+    ];
+
+    const bar = document.querySelector('.bar');
+    function getViewportHeight() { return window.innerHeight - bar.offsetHeight; }
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+    renderer.setClearColor(0xeef1f6, 1);
+
+    const vp = document.getElementById('viewport');
+    vp.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(42, window.innerWidth / getViewportHeight(), 0.1, 500);
+    camera.position.set(0, 9, 20);
+    camera.lookAt(0, 0, 0);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.07;
+    controls.minDistance = 5;
+    controls.maxDistance = 45;
+    controls.maxPolarAngle = Math.PI / 1.75;
+    controls.target.set(0, 0, 0);
+    controls.update();
+
+    function resizeRenderer() {
+      const W = window.innerWidth, H = getViewportHeight();
+      renderer.setSize(W, H);
+      camera.aspect = W / Math.max(H, 1);
+      camera.updateProjectionMatrix();
+      vp.style.height = H + 'px';
+    }
+    window.addEventListener('resize', resizeRenderer);
+    resizeRenderer();
+
+    const ambientLight = new THREE.AmbientLight(0xfff0e0, 0.55);
+    scene.add(ambientLight);
+    const keyLight = new THREE.DirectionalLight(0xfff5e8, 1.5);
+    keyLight.position.set(-9, 16, 11);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(2048, 2048);
+    keyLight.shadow.camera.near = 1;
+    keyLight.shadow.camera.far = 70;
+    keyLight.shadow.camera.left = -18;
+    keyLight.shadow.camera.right = 18;
+    keyLight.shadow.camera.top = 18;
+    keyLight.shadow.camera.bottom = -18;
+    keyLight.shadow.bias = -0.001;
+    scene.add(keyLight);
+    const fillLight = new THREE.DirectionalLight(0xcce0ff, 0.55);
+    fillLight.position.set(11, 7, -6);
+    scene.add(fillLight);
+    const rimLight = new THREE.DirectionalLight(0xffffff, 0.25);
+    rimLight.position.set(0, 5, -14);
+    scene.add(rimLight);
+    const bounceLight = new THREE.PointLight(0xffe8cc, 0.18, 35);
+    bounceLight.position.set(0, -3, 0);
+    scene.add(bounceLight);
+    const ledGlowLight = new THREE.PointLight(0x00ff66, 0, 6);
+    scene.add(ledGlowLight);
+
+    const floorGeo = new THREE.PlaneGeometry(100, 100);
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0xeaecf0, roughness: 0.92, metalness: 0 });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -2.8;
+    floor.receiveShadow = true;
+    scene.add(floor);
+    const grid = new THREE.GridHelper(50, 50, 0xccccdd, 0xdddde8);
+    grid.position.y = -2.79;
+    scene.add(grid);
+
+    function mat(color, roughness = 0.5, metalness = 0.0, opts = {}) {
+      return new THREE.MeshStandardMaterial({ color, roughness, metalness, ...opts });
+    }
+    function box(w, h, d, material) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+      m.castShadow = true; m.receiveShadow = true;
+      return m;
+    }
+    function cyl(rt, rb, h, segs, material) {
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, segs), material);
+      m.castShadow = true; m.receiveShadow = true;
+      return m;
+    }
+    function sphere(r, segs, material) {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(r, segs, segs), material);
+      m.castShadow = true; m.receiveShadow = true;
+      return m;
+    }
+    function addTo(parent, child, x, y, z, rx, ry, rz) {
+      child.position.set(x || 0, y || 0, z || 0);
+      child.rotation.set(rx || 0, ry || 0, rz || 0);
+      parent.add(child);
+      return child;
+    }
+    function faceLabel(text, w, h, color, bg, fontPx) {
+      const c = document.createElement('canvas');
+      c.width = 256; c.height = 96;
+      const cx = c.getContext('2d');
+      cx.fillStyle = bg || 'rgba(255,255,255,0.9)';
+      cx.fillRect(0, 0, c.width, c.height);
+      cx.fillStyle = color || '#0f172a';
+      cx.textAlign = 'center';
+      cx.textBaseline = 'middle';
+      cx.font = '900 ' + (fontPx || 34) + 'px Outfit, sans-serif';
+      cx.fillText(text, c.width / 2, c.height / 2 + 1);
+      const tex = new THREE.CanvasTexture(c);
+      tex.anisotropy = 4;
+      return new THREE.Mesh(
+        new THREE.PlaneGeometry(w, h),
+        new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.7, metalness: 0.0 })
+      );
+    }
+
+    function createBreadboard() {
+      const g = new THREE.Group();
+      g.name = 'breadboard';
+      g.add(box(8.8, 0.5, 5.8, mat(0xf4f4f0, 0.65, 0)));
+      const redRail = mat(0xcc1111, 0.75, 0);
+      [-2.45, 2.45].forEach(function(z) {
+        addTo(g, box(8.5, 0.07, 0.28, redRail), 0, 0.28, z);
+      });
+      const blueRail = mat(0x1133cc, 0.75, 0);
+      [-2.15, 2.15].forEach(function(z) {
+        addTo(g, box(8.5, 0.07, 0.28, blueRail), 0, 0.28, z);
+      });
+      addTo(g, box(8.5, 0.08, 0.18, mat(0xbbbbbb, 0.8, 0)), 0, 0.28, 0);
+      const holeGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.15, 6);
+      const holeMat = mat(0x888888, 0.5, 0.5);
+      const holes = new THREE.InstancedMesh(holeGeo, holeMat, 30 * 10);
+      const dummy = new THREE.Object3D();
+      let idx = 0;
+      for (let col = 0; col < 30; col++) {
+        for (let row = 0; row < 10; row++) {
+          dummy.position.set(-3.6 + col * 0.254, 0.28, -1.15 + row * 0.254);
+          dummy.updateMatrix();
+          holes.setMatrixAt(idx++, dummy.matrix);
+        }
+      }
+      holes.instanceMatrix.needsUpdate = true;
+      g.add(holes);
+      const labelCanvas = document.createElement('canvas');
+      labelCanvas.width = 256; labelCanvas.height = 32;
+      const lx = labelCanvas.getContext('2d');
+      lx.fillStyle = '#f4f4f0'; lx.fillRect(0, 0, 256, 32);
+      lx.fillStyle = '#888'; lx.font = 'bold 14px monospace';
+      lx.textAlign = 'center'; lx.fillText('BREADBOARD', 128, 22);
+      const labelTex = new THREE.CanvasTexture(labelCanvas);
+      const labelMesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(2.5, 0.35),
+        new THREE.MeshStandardMaterial({ map: labelTex, roughness: 0.8 })
+      );
+      addTo(g, labelMesh, 0, 0.26, -2.8, -Math.PI / 2, 0, 0);
+      addTo(g, faceLabel('BREADBOARD', 2.7, 0.5, '#b91c1c', 'rgba(255,255,255,0.92)', 30), 0, 0.26, -2.2, -Math.PI / 2, 0, 0);
+      return g;
+    }
+
+    function createArduino() {
+      const g = new THREE.Group();
+      g.name = 'arduino';
+      const shape = new THREE.Shape();
+      const W = 6.8, D = 5.3, notchW = 1.2, notchD = 0.6;
+      shape.moveTo(0, 0); shape.lineTo(W, 0); shape.lineTo(W, D);
+      shape.lineTo(notchW, D); shape.lineTo(notchW, D - notchD); shape.lineTo(0, D - notchD); shape.closePath();
+      const pcbGeo = new THREE.ExtrudeGeometry(shape, { depth: 0.15, bevelEnabled: false });
+      pcbGeo.translate(-W / 2, -D / 2, 0);
+      const pcb = new THREE.Mesh(pcbGeo, mat(0x1a6b5a, 0.38, 0.12));
+      pcb.rotation.x = -Math.PI / 2;
+      pcb.castShadow = true; pcb.receiveShadow = true;
+      g.add(pcb);
+      addTo(g, box(1.1, 0.18, 1.1, mat(0x111111, 0.42, 0.28)), 0.3, 0.165, 0.2);
+      const legMat = mat(0xd4af37, 0.15, 0.9);
+      const legGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.18, 6);
+      for (let i = 0; i < 14; i++) {
+        [-0.62, 0.62].forEach(function(xOff) {
+          const leg = new THREE.Mesh(legGeo, legMat);
+          leg.position.set(0.3 + xOff, 0.09, -0.45 + i * 0.072);
+          leg.rotation.z = Math.PI / 2;
+          g.add(leg);
+        });
+      }
+      addTo(g, box(0.85, 0.52, 0.65, mat(0xb8b8b8, 0.22, 0.75)), -3.05, 0.35, 1.2);
+      addTo(g, box(0.5, 0.38, 0.05, mat(0x111111, 1, 0)), -3.05, 0.35, 0.9);
+      addTo(g, cyl(0.28, 0.28, 0.7, 14, mat(0x1e1e1e, 0.55, 0.2)), -3.05, 0.35, -1.8, 0, 0, Math.PI / 2);
+      addTo(g, cyl(0.11, 0.11, 0.45, 10, mat(0xcecece, 0.12, 0.88)), 1.2, 0.25, -0.5);
+      addTo(g, cyl(0.17, 0.17, 0.12, 10, mat(0xdd2222, 0.5, 0)), -1.5, 0.21, -1.8);
+      const pinMat = mat(0xd4af37, 0.12, 0.92);
+      const pinBase = mat(0x111111, 0.6, 0);
+      const pinGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.45, 6);
+      function addPinRow(xStart, xEnd, count, z) {
+        addTo(g, box((xEnd - xStart) + 0.2, 0.15, 0.22, pinBase), (xStart + xEnd) / 2, 0.07, z);
+        for (let i = 0; i < count; i++) {
+          const pin = new THREE.Mesh(pinGeo, pinMat);
+          pin.position.set(xStart + i * ((xEnd - xStart) / (count - 1)), 0.3, z);
+          pin.castShadow = true; pin.receiveShadow = true;
+          g.add(pin);
+        }
+      }
+      addPinRow(-2.2, 1.2, 14, -2.5);
+      addPinRow(-2.8, -1.2, 6, 2.5);
+      const sc = document.createElement('canvas');
+      sc.width = 128; sc.height = 64;
+      const sx = sc.getContext('2d');
+      sx.fillStyle = '#1a6b5a'; sx.fillRect(0, 0, 128, 64);
+      sx.fillStyle = '#2dd4bf'; sx.font = 'bold 11px "Courier New"';
+      sx.textAlign = 'center'; sx.fillText('Arduino', 64, 24);
+      sx.font = '9px "Courier New"'; sx.fillText('UNO R3', 64, 40);
+      const scMesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(2.0, 1.0),
+        new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(sc), roughness: 0.4, transparent: true, opacity: 0.9 })
+      );
+      addTo(g, scMesh, -0.5, 0.165, -0.2, -Math.PI / 2, 0, 0);
+      addTo(g, faceLabel('ARDUINO', 2.2, 0.55, '#99f6e4', 'rgba(15,35,30,0.85)', 30), 1.15, 0.17, -0.7, -Math.PI / 2, 0, 0);
+      return g;
+    }
+
+    function createSoundSensor() {
+      const g = new THREE.Group(); g.name = 'soundSensor';
+      g.add(box(1.6, 0.12, 3.4, mat(0x003480, 0.42, 0.1)));
+      addTo(g, cyl(0.3, 0.3, 0.6, 24, mat(0x909090, 0.18, 0.82)), 0, 0.36, -1.1);
+      const gc = document.createElement('canvas');
+      gc.width = 64; gc.height = 64;
+      const gctx = gc.getContext('2d');
+      gctx.fillStyle = '#888'; gctx.fillRect(0, 0, 64, 64);
+      gctx.strokeStyle = '#aaa'; gctx.lineWidth = 2;
+      for (let i = 0; i < 64; i += 8) {
+        gctx.beginPath(); gctx.moveTo(i, 0); gctx.lineTo(i, 64); gctx.stroke();
+        gctx.beginPath(); gctx.moveTo(0, i); gctx.lineTo(64, i); gctx.stroke();
+      }
+      addTo(g, new THREE.Mesh(new THREE.CircleGeometry(0.28, 24), new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(gc), roughness: 0.5 })), 0, 0.67, -1.1, -Math.PI / 2, 0, 0);
+      addTo(g, box(0.55, 0.1, 0.38, mat(0x111111, 0.42, 0.28)), 0, 0.18, 0.4);
+      addTo(g, cyl(0.22, 0.22, 0.26, 14, mat(0x1155dd, 0.42, 0)), 0.3, 0.29, 1.1);
+      addTo(g, box(0.02, 0.06, 0.22, mat(0x555555, 0.8, 0.5)), 0.3, 0.43, 1.1);
+      addTo(g, cyl(0.07, 0.07, 0.14, 8, mat(0x00ff44, 0.3, 0, { emissive: new THREE.Color(0x00ff44), emissiveIntensity: 0.3 })), -0.45, 0.2, 0.8);
+      const headerMat = mat(0xd4af37, 0.12, 0.92);
+      const headerGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.55, 6);
+      for (let i = 0; i < 4; i++) {
+        const p = new THREE.Mesh(headerGeo, headerMat);
+        p.position.set(-0.3 + i * 0.2, 0.3, 1.55);
+        p.castShadow = true; p.receiveShadow = true;
+        g.add(p);
+      }
+      addTo(g, box(0.75, 0.14, 0.22, mat(0x111111, 0.6, 0)), 0, 0.07, 1.55);
+      addTo(g, faceLabel('SENSOR', 1.4, 0.4, '#ffffff', 'rgba(10,30,90,0.88)', 28), 0, 0.13, 0.9, -Math.PI / 2, 0, 0);
+      return g;
+    }
+
+    function createServo() {
+      const g = new THREE.Group();
+      g.name = 'servo';
+      const blueMat = mat(0x2255bb, 0.52, 0);
+      const darkBlueMat = mat(0x1a44aa, 0.52, 0);
+      g.add(box(2.3, 2.0, 1.2, blueMat));
+      addTo(g, box(2.3, 0.25, 1.2, darkBlueMat), 0, 1.125, 0);
+      addTo(g, cyl(0.2, 0.22, 0.32, 14, mat(0xcfcfcf, 0.3, 0.6)), 0.4, 1.27, 0);
+      const hornH = addTo(g, box(1.25, 0.12, 0.26, mat(0xeeeeee, 0.6, 0)), 0.4, 1.46, 0);
+      const hornV = addTo(g, box(0.26, 0.12, 1.25, mat(0xeeeeee, 0.6, 0)), 0.4, 1.46, 0);
+      g.userData.hornH = hornH; g.userData.hornV = hornV;
+      addTo(g, cyl(0.07, 0.07, 0.15, 8, mat(0xd4af37, 0.2, 0.85)), 0.4, 1.53, 0);
+      [-1.45, 1.45].forEach(function(x) {
+        addTo(g, box(0.55, 0.35, 1.2, blueMat), x, -0.6, 0);
+        addTo(g, cyl(0.1, 0.1, 0.38, 8, mat(0x111111, 1, 0)), x, -0.6, 0, Math.PI / 2, 0, 0);
+      });
+      [0xdd2222, 0x222222, 0xff8800].forEach(function(color, i) {
+        const xOff = -0.12 + i * 0.12;
+        const pts = [
+          new THREE.Vector3(xOff, -1.0, -0.5), new THREE.Vector3(xOff, -1.6, -0.6),
+          new THREE.Vector3(xOff, -2.2, -0.5), new THREE.Vector3(xOff, -2.8, -0.3)
+        ];
+        const wireTube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16, 0.055, 6, false), mat(color, 0.75, 0.1));
+        wireTube.castShadow = true; wireTube.receiveShadow = true;
+        g.add(wireTube);
+      });
+      addTo(g, faceLabel('SERVO', 1.35, 0.36, '#e2e8f0', 'rgba(15,23,42,0.58)', 24), 0, 0.01, 0.61, 0, 0, 0);
+      return g;
+    }
+
+    function createLED() {
+      const g = new THREE.Group();
+      g.name = 'led';
+      const lensMat = new THREE.MeshPhysicalMaterial({
+        color: 0x00ff44, transparent: true, opacity: 0.72, transmission: 0.35,
+        roughness: 0.0, metalness: 0.0, emissive: new THREE.Color(0x00ff44), emissiveIntensity: 0.25
+      });
+      const lensCyl = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.22, 0.55, 24), lensMat);
+      lensCyl.castShadow = true; lensCyl.receiveShadow = true; g.add(lensCyl);
+      addTo(g, new THREE.Mesh(new THREE.SphereGeometry(0.25, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), lensMat), 0, 0.275, 0);
+      addTo(g, cyl(0.28, 0.28, 0.08, 24, mat(0xcccccc, 0.5, 0.5)), 0, -0.24, 0);
+      addTo(g, new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.5, 6), mat(0xd4af37, 0.1, 0.92)), 0.08, -1.0, 0);
+      addTo(g, new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.3, 6), mat(0xd4af37, 0.1, 0.92)), -0.08, -0.9, 0);
+      g.userData.lensMat = lensMat;
+      return g;
+    }
+
+    function createResistor() {
+      const g = new THREE.Group(); g.name = 'resistor';
+      const body = cyl(0.15, 0.15, 0.92, 16, mat(0xd4a843, 0.65, 0));
+      body.rotation.z = Math.PI / 2; g.add(body);
+      [
+        { color: 0xcc1111, x: -0.28 }, { color: 0xcc1111, x: -0.14 },
+        { color: 0x8B4513, x: 0.0 }, { color: 0xd4af37, x: 0.22 }
+      ].forEach(function(b) {
+        const band = cyl(0.157, 0.157, 0.08, 16, mat(b.color, 0.42, 0));
+        band.rotation.z = Math.PI / 2; band.position.x = b.x; g.add(band);
+      });
+      [-0.82, 0.82].forEach(function(x) {
+        const lead = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.72, 6), mat(0xd4af37, 0.12, 0.92));
+        lead.rotation.z = Math.PI / 2; lead.position.x = x; lead.castShadow = true; lead.receiveShadow = true; g.add(lead);
+      });
+      return g;
+    }
+
+    function createBatteryHolder() {
+      const g = new THREE.Group();
+      g.name = 'batteryHolder';
+      g.add(box(6.2, 1.45, 2.9, mat(0x1a1a1a, 0.72, 0)));
+      [[-1.9, -0.5], [-0.65, 0.5], [0.65, -0.5], [1.9, 0.5]].forEach(function(p) {
+        addTo(g, cyl(0.56, 0.56, 2.5, 20, mat(0x2a2a2a, 0.85, 0)), p[0], 0, p[1], Math.PI / 2, 0, 0);
+        addTo(g, cyl(0.52, 0.52, 2.48, 20, mat(0x2266aa, 0.4, 0.3)), p[0], 0, p[1], Math.PI / 2, 0, 0);
+        addTo(g, sphere(0.08, 8, mat(0xd0d0d0, 0.3, 0.7)), p[0], 0, p[1] + (p[1] < 0 ? -1.26 : 1.26));
+        addTo(g, cyl(0.08, 0.08, 0.32, 8, mat(0xcfcfcf, 0.3, 0.75)), p[0], 0, p[1] + (p[1] < 0 ? 1.26 : -1.26), Math.PI / 2, 0, 0);
+      });
+      [[0xee1111, 1], [0x111111, -1]].forEach(function(item) {
+        const side = item[1];
+        const pts = [
+          new THREE.Vector3(3.1 * side, 0, 0), new THREE.Vector3(3.5 * side, 0.5, 0),
+          new THREE.Vector3(3.8 * side, 1.0, 0), new THREE.Vector3(4.2 * side, 1.3, 0)
+        ];
+        const wireTube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 14, 0.07, 6, false), mat(item[0], 0.75, 0.08));
+        wireTube.castShadow = true; wireTube.receiveShadow = true; g.add(wireTube);
+        const tip = box(0.24, 0.16, 0.14, mat(0xe5e7eb, 0.5, 0.03));
+        addTo(g, tip, 4.24 * side, 1.33, 0);
+        const pin = cyl(0.02, 0.02, 0.2, 8, mat(item[0], 0.2, 0.65));
+        addTo(g, pin, 4.37 * side, 1.33, 0, 0, 0, Math.PI / 2);
+      });
+      addTo(g, faceLabel('BATTERY', 2.0, 0.5, '#f8fafc', 'rgba(20,20,20,0.88)', 28), 0, 0.76, 0, 0, 0, 0);
+      return g;
+    }
+
+    function createChassis() {
+      const g = new THREE.Group();
+      g.name = 'chassis';
+      const chassisMat = new THREE.MeshPhysicalMaterial({ color: 0xff6600, transparent: true, opacity: 0.6, roughness: 0.12, metalness: 0, transmission: 0.25 });
+      const plate = new THREE.Mesh(new THREE.BoxGeometry(14, 0.3, 10), chassisMat);
+      plate.receiveShadow = true; plate.castShadow = true; g.add(plate);
+      const holeMat = mat(0x000000, 1, 0, { transparent: true, opacity: 0 });
+      const holeRingMat = mat(0xff8833, 0.3, 0.2, { transparent: true, opacity: 0.7 });
+      [[-4, -3], [4, -3], [-4, 3], [4, 3], [0, 0], [-4, 0], [4, 0]].forEach(function(p) {
+        addTo(g, cyl(0.35, 0.35, 0.32, 12, holeRingMat), p[0], 0, p[1]);
+        addTo(g, cyl(0.2, 0.2, 0.34, 12, holeMat), p[0], 0, p[1]);
+      });
+      [[-7.2, 1], [7.2, -1]].forEach(function(p) {
+        addTo(g, box(0.4, 2.2, 2.2, mat(0x222222, 0.55, 0.2)), p[0], 1.0, 0);
+        addTo(g, box(1.4, 1.2, 1.2, mat(0x333333, 0.45, 0.15)), p[0], 1.0, 0);
+        addTo(g, cyl(0.1, 0.1, 0.7, 8, mat(0xd0d0d0, 0.2, 0.85)), p[0] + (p[1] * 0.75), 1.0, 0, 0, 0, Math.PI / 2);
+      });
+      [[-8.4, 'wheelL'], [8.4, 'wheelR']].forEach(function(p) {
+        const wheel = new THREE.Group();
+        wheel.name = p[1];
+        const tire = new THREE.Mesh(new THREE.TorusGeometry(1.9, 0.55, 14, 32), mat(0x111111, 0.92, 0));
+        addTo(wheel, tire, 0, 0, 0, 0, Math.PI / 2, 0); tire.castShadow = true;
+        addTo(wheel, cyl(1.4, 1.4, 0.6, 24, mat(0xf0f0f0, 0.5, 0.1)), 0, 0, 0, 0, 0, Math.PI / 2);
+        for (let s = 0; s < 5; s++) {
+          const spoke = box(0.08, 0.6, 1.4, mat(0xdddddd, 0.5, 0.15));
+          spoke.rotation.set(0, 0, s * (Math.PI * 2 / 5));
+          wheel.add(spoke);
+        }
+        wheel.position.set(p[0], 1.0, 0);
+        g.add(wheel);
+      });
+      addTo(g, sphere(0.5, 14, mat(0xcfcfcf, 0.25, 0.7)), 0, -0.55, 4.6);
+      addTo(g, cyl(0.08, 0.08, 0.55, 8, mat(0xaaaaaa, 0.3, 0.7)), 0, -0.12, 4.6);
+      addTo(g, faceLabel('CLAP BOT', 3.4, 0.55, '#111827', 'rgba(255,170,70,0.85)', 30), 0, 0.18, -3.5, -Math.PI / 2, 0, 0);
+      return g;
+    }
+
+    class AnimatedWire {
+      constructor(startPos, endPos, color, sceneRef, opts) {
+        const cfg = opts || {};
+        const radius = cfg.radius || 0.07;
+        const controlLift = cfg.controlLift || 3.5;
+        const mid = new THREE.Vector3((startPos.x + endPos.x) / 2, Math.max(startPos.y, endPos.y) + controlLift, (startPos.z + endPos.z) / 2);
+        this.curve = new THREE.QuadraticBezierCurve3(startPos.clone(), mid, endPos.clone());
+        this.radius = radius;
+        this.scene = sceneRef;
+        this.progress = 0;
+        this.mesh = null;
+        this.material = new THREE.MeshStandardMaterial({ color: color, roughness: 0.72, metalness: 0.08 });
+        this.dot = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.8, 8, 8), this.material);
+        this.scene.add(this.dot);
+        this.flow = [];
+        for (let i = 0; i < 4; i++) {
+          const fm = new THREE.Mesh(
+            new THREE.SphereGeometry(radius * 0.62, 8, 8),
+            new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: new THREE.Color(color), emissiveIntensity: 1.1, roughness: 0.2, metalness: 0.0 })
+          );
+          fm.visible = false;
+          this.scene.add(fm);
+          this.flow.push({ mesh: fm, t: i * 0.25 });
+        }
+      }
+      update(progressDelta) {
+        this.progress = Math.min(1, this.progress + progressDelta);
+        const pts = Math.max(2, Math.floor(this.progress * 32));
+        const subPoints = [];
+        for (let i = 0; i <= pts; i++) subPoints.push(this.curve.getPoint(i / pts));
+        const subCurve = new THREE.CatmullRomCurve3(subPoints);
+        if (this.mesh) {
+          this.mesh.geometry.dispose();
+          this.scene.remove(this.mesh);
+        }
+        this.mesh = new THREE.Mesh(new THREE.TubeGeometry(subCurve, pts, this.radius, 6, false), this.material);
+        this.mesh.castShadow = true; this.mesh.receiveShadow = true;
+        this.scene.add(this.mesh);
+        const tip = this.curve.getPoint(this.progress);
+        this.dot.position.copy(tip);
+        this.dot.visible = this.progress < 1;
+        const pulse = 0.75 + 0.45 * Math.sin(performance.now() * 0.012);
+        this.flow.forEach(function(f, i) {
+          f.t += 0.013 + i * 0.0007;
+          const u = (f.t % 1);
+          const p = this.curve.getPoint(u);
+          f.mesh.position.copy(p);
+          f.mesh.visible = this.progress >= 0.99;
+          f.mesh.material.emissiveIntensity = 0.65 + pulse * 0.35;
+        }.bind(this));
+      }
+      destroy() {
+        if (this.mesh) { this.mesh.geometry.dispose(); this.scene.remove(this.mesh); }
+        this.scene.remove(this.dot);
+        this.flow.forEach(function(f) { this.scene.remove(f.mesh); }.bind(this));
+      }
+    }
+
+    let camAnim = null;
+    function setCameraTarget(toPos, toLook, durationMs) {
+      const d = durationMs || 1100;
+      const fromPos = camera.position.clone();
+      const fromLook = controls.target.clone();
+      const startTime = performance.now();
+      camAnim = function() {
+        const t = Math.min(1, (performance.now() - startTime) / d);
+        const et = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        camera.position.lerpVectors(fromPos, toPos, et);
+        controls.target.lerpVectors(fromLook, toLook, et);
+        controls.update();
+        if (t >= 1) camAnim = null;
+      };
+    }
+    const CAM = {
+      default:   { pos: new THREE.Vector3(0, 9, 20),   look: new THREE.Vector3(0, 0, 0) },
+      showcase:  { pos: new THREE.Vector3(0, 5, 12),   look: new THREE.Vector3(0, 0, 0) },
+      assembly:  { pos: new THREE.Vector3(6, 14, 18),  look: new THREE.Vector3(0, 0, 0) },
+      assembled: { pos: new THREE.Vector3(8, 18, 24),  look: new THREE.Vector3(0, 0, 0) },
+      testMode:  { pos: new THREE.Vector3(0, 14, 24),  look: new THREE.Vector3(0, 0, 0) }
+    };
+
+    const labelPool = {};
+    function createLabel(id, text, subtext) {
+      const el = document.createElement('div');
+      el.className = 'lbl3d';
+      el.innerHTML = text + (subtext ? '<br><span style="font-size:9px;color:#64748b">' + subtext + '</span>' : '');
+      el.id = 'lbl_' + id;
+      document.getElementById('labels').appendChild(el);
+      return el;
+    }
+    function updateLabelPosition(el, mesh, offsetY) {
+      const worldPos = new THREE.Vector3();
+      mesh.getWorldPosition(worldPos);
+      worldPos.y += offsetY || 2;
+      worldPos.project(camera);
+      const W = window.innerWidth, H = getViewportHeight();
+      const x = (worldPos.x * 0.5 + 0.5) * W;
+      const y = (-worldPos.y * 0.5 + 0.5) * H;
+      el.style.left = x + 'px';
+      el.style.top = y + 'px';
+      el.style.opacity = (worldPos.z < 1 && y > 0 && y < H) ? '1' : '0';
+    }
+    function hideAllLabels() {
+      Object.keys(labelPool).forEach(function(k) { labelPool[k].style.opacity = '0'; });
+    }
+
+    const CODE_LINES = [
+      'int sound = analogRead(A0);',
+      '',
+      'if (sound > 500) {',
+      '  digitalWrite(7, HIGH);',
+      '  leftServo.write(0);',
+      '  rightServo.write(180);',
+      '  delay(2000);  // 2s',
+      '  leftServo.write(90);',
+      '  rightServo.write(90);',
+      '  digitalWrite(7, LOW);',
+      '}'
+    ];
+    const codePop = document.getElementById('codePop');
+    const codeBody = document.getElementById('codeBody');
+    const codeTotalChars = CODE_LINES.join('\n').length;
+    function drawCodePopup(chars) {
+      let left = chars;
+      const out = [];
+      CODE_LINES.forEach(function(line) {
+        out.push(line.slice(0, Math.max(0, left)));
+        left -= line.length + 1;
+      });
+      codeBody.textContent = out.join('\n');
+    }
+
+    let breadboard = createBreadboard();
+    let arduino = createArduino();
+    let sensor = createSoundSensor();
+    let servoL = createServo(); servoL.name = 'servoL';
+    let servoR = createServo(); servoR.name = 'servoR';
+    let led = createLED();
+    let resistor = createResistor();
+    let battery = createBatteryHolder();
+    let chassis = createChassis();
+
+    [breadboard, arduino, sensor, servoL, servoR, led, resistor, battery, chassis].forEach(function(g) { g.visible = false; scene.add(g); });
+    ledGlowLight.position.set(0, 0.8, 0);
+
+    const ASSEMBLY_POS = {
+      breadboard: new THREE.Vector3(0, 0, 0), arduino: new THREE.Vector3(-5, 0.35, 0.3),
+      sensor: new THREE.Vector3(0.5, 0.5, -4.2), servoL: new THREE.Vector3(4.8, 0.35, -2.8),
+      servoR: new THREE.Vector3(4.8, 0.35, 2.8), led: new THREE.Vector3(1.2, 0.5, 3.1),
+      resistor: new THREE.Vector3(-0.6, 0.5, 3.1), battery: new THREE.Vector3(-5.2, 0.35, 2.8)
+    };
+    const CHASSIS_POS = {
+      breadboard: new THREE.Vector3(0, 1.0, 0.5), arduino: new THREE.Vector3(0, 1.0, -0.5),
+      sensor: new THREE.Vector3(0, 1.0, -5.8), battery: new THREE.Vector3(0, 1.0, 3.8), led: new THREE.Vector3(1.5, 1.2, -2.0)
+    };
+
+    const wires = [];
+    function clearWires() { while (wires.length) wires.pop().destroy(); }
+    function addWire(a, b, color, opts) { wires.push(new AnimatedWire(a, b, color, scene, opts || {})); }
+
+    function worldPos(group, dx, dy, dz) {
+      const p = new THREE.Vector3(dx || 0, dy || 0, dz || 0);
+      group.localToWorld(p);
+      return p;
+    }
+
+    const labelDefs = {
+      breadboard: ['Breadboard', '400 points'], arduino: ['Arduino Uno', 'ATmega328P'], sensor: ['KY-038', 'A0 analog'],
+      servoL: ['Servo L', 'Pin D9'], servoR: ['Servo R', 'Pin D10'], led: ['LED', 'Pin D7'], resistor: ['220Ω', 'Current limit'],
+      battery: ['4xAA 6V', 'Vin power'], chassis: ['2WD Chassis', 'Robot base'], power: ['5V / GND', null],
+      d9: ['D9', null], d10: ['D10', null], d7: ['D7', null], a0: ['A0', null], vin: ['Vin', null]
+    };
+    Object.keys(labelDefs).forEach(function(k) { labelPool[k] = createLabel(k, labelDefs[k][0], labelDefs[k][1]); });
+    hideAllLabels();
+
+    let step = 0;
+    let animProgress = 0;
+    const ANIM_SPEED = 0.016;
+
+    function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+    function easeInOutCubic(t) { return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3) / 2; }
+    function easeOutBounce(t) {
+      const n1 = 7.5625, d1 = 2.75;
+      if (t < 1 / d1) return n1 * t * t;
+      if (t < 2 / d1) { t -= 1.5 / d1; return n1 * t * t + 0.75; }
+      if (t < 2.5 / d1) { t -= 2.25 / d1; return n1 * t * t + 0.9375; }
+      t -= 2.625 / d1; return n1 * t * t + 0.984375;
+    }
+
+    let assembledMounted = false;
+    function detachIfMounted() {
+      if (!assembledMounted) return;
+      [breadboard, arduino, sensor, servoL, servoR, led, resistor, battery].forEach(function(c) { scene.attach(c); });
+      assembledMounted = false;
+    }
+    function mountToChassis() {
+      if (assembledMounted) return;
+      [breadboard, arduino, sensor, servoL, servoR, led, resistor, battery].forEach(function(c) { chassis.add(c); });
+      assembledMounted = true;
+    }
+
+    function resetVisibility() {
+      [breadboard, arduino, sensor, servoL, servoR, led, resistor, battery, chassis].forEach(function(g) { g.visible = false; });
+      codePop.classList.remove('show');
+      hideAllLabels();
+      clearWires();
+    }
+
+    function setAssemblyPositions() {
+      breadboard.position.copy(ASSEMBLY_POS.breadboard);
+      arduino.position.copy(ASSEMBLY_POS.arduino);
+      sensor.position.copy(ASSEMBLY_POS.sensor);
+      servoL.position.copy(ASSEMBLY_POS.servoL);
+      servoR.position.copy(ASSEMBLY_POS.servoR);
+      led.position.copy(ASSEMBLY_POS.led);
+      resistor.position.copy(ASSEMBLY_POS.resistor);
+      battery.position.copy(ASSEMBLY_POS.battery);
+      [breadboard, arduino, sensor, servoL, servoR, led, resistor, battery].forEach(function(g) { g.rotation.set(0, 0, 0); });
+    }
+    function applyStepVisibility(n) {
+      [breadboard, arduino, sensor, servoL, servoR, led, resistor, battery, chassis].forEach(function(g) { g.visible = false; });
+      if (n === 0) return;
+      if (n <= 2) {
+        breadboard.visible = true;
+        return;
+      }
+      // Keep all core build parts visible from step 3 onward.
+      breadboard.visible = true;
+      arduino.visible = true;
+      sensor.visible = true;
+      servoL.visible = true;
+      servoR.visible = true;
+      led.visible = true;
+      resistor.visible = true;
+      battery.visible = true;
+      chassis.visible = n >= 14;
+    }
+
+    function setStep(n) {
+      detachIfMounted();
+      resetVisibility();
+      const cmap = [CAM.default, CAM.showcase, CAM.assembly, CAM.showcase, CAM.assembly, CAM.showcase, CAM.assembly, CAM.showcase, CAM.assembly, CAM.showcase, CAM.assembly, CAM.showcase, CAM.assembly, CAM.assembly, CAM.assembled, CAM.testMode, CAM.testMode][n] || CAM.default;
+      setCameraTarget(cmap.pos.clone(), cmap.look.clone(), 1100);
+
+      applyStepVisibility(n);
+      if (n === 0) return;
+
+      if (n === 1) breadboard.position.set(0, 8, 0);
+      if (n >= 2) setAssemblyPositions();
+      if (n === 3) { arduino.position.set(0, -5, 0); }
+      if (n === 5) { sensor.position.set(0, 8, 0); }
+      if (n === 7) {
+        servoL.position.set(-7, 3.2, 0); servoR.position.set(7, 3.2, 0);
+      }
+      if (n === 9) {
+        led.position.set(-1.4, 8.0, 0); resistor.position.set(1.4, 8.0, 0);
+      }
+      if (n === 11) {
+        battery.position.set(-10, 3.0, 0);
+      }
+
+      if (n === 4 || n === 6 || n === 8 || n === 10 || n === 12 || n === 13) setAssemblyPositions();
+      if (n === 4) {
+        addWire(worldPos(arduino, -2.2, 0.35, -2.5), worldPos(breadboard, -4.0, 0.35, -2.45), 0xcc1111, { controlLift: 1.25, radius: 0.06 });
+        addWire(worldPos(arduino, -2.0, 0.35, 2.5), worldPos(breadboard, -4.0, 0.35, 2.15), 0x2266cc, { controlLift: 1.25, radius: 0.06 });
+      }
+      if (n === 6) addWire(worldPos(sensor, 0, 0.3, 1.5), worldPos(arduino, -2.8, 0.35, 2.5), 0x2266cc, { controlLift: 1.6, radius: 0.06 });
+      if (n === 8) {
+        addWire(worldPos(servoL, 0, -1.0, -0.2), worldPos(arduino, -0.6, 0.35, -2.5), 0xff8800, { controlLift: 1.8, radius: 0.06 });
+        addWire(worldPos(servoR, 0, -1.0, -0.2), worldPos(arduino, -0.1, 0.35, -2.5), 0xff8800, { controlLift: 1.8, radius: 0.06 });
+      }
+      if (n === 10) addWire(worldPos(led, 0.08, -1.3, 0), worldPos(arduino, 0.5, 0.35, -2.5), 0x229922, { controlLift: 1.4, radius: 0.06 });
+      if (n === 12) addWire(worldPos(battery, 3.8, 1.3, 0), worldPos(arduino, -3.2, 0.35, -1.8), 0x8833cc, { controlLift: 5.5 });
+
+      if (n === 13) {
+        setAssemblyPositions();
+        [breadboard, arduino, sensor, servoL, servoR, led, resistor, battery].forEach(function(g) {
+          g.traverse(function(o) { if (o.material && o.material.opacity !== undefined) { o.material.transparent = true; o.material.opacity = 0.3; } });
+        });
+        codePop.classList.add('show');
+        drawCodePopup(0);
+      } else {
+        [breadboard, arduino, sensor, servoL, servoR, led, resistor, battery].forEach(function(g) {
+          g.traverse(function(o) { if (o.material && o.material.opacity !== undefined) { o.material.transparent = false; o.material.opacity = 1; } });
+        });
+        codePop.classList.remove('show');
+      }
+
+      if (n >= 14) {
+        setAssemblyPositions();
+        chassis.position.set(0, -4, 0);
+        mountToChassis();
+        breadboard.position.copy(ASSEMBLY_POS.breadboard);
+        arduino.position.copy(ASSEMBLY_POS.arduino);
+        sensor.position.copy(ASSEMBLY_POS.sensor);
+        servoL.position.copy(ASSEMBLY_POS.servoL);
+        servoR.position.copy(ASSEMBLY_POS.servoR);
+        led.position.copy(ASSEMBLY_POS.led);
+        resistor.position.copy(ASSEMBLY_POS.resistor);
+        battery.position.copy(ASSEMBLY_POS.battery);
+        if (n >= 15) chassis.position.y = 0;
+      }
+    }
+
+    function showLabel(id, mesh, offsetY) {
+      if (!labelPool[id] || !mesh) return;
+      updateLabelPosition(labelPool[id], mesh, offsetY || 2);
+    }
+    function updateAllLabels() {
+      hideAllLabels();
+      if (step === 1 || step === 2 || step >= 4) showLabel('breadboard', breadboard, 1.8);
+      if (step >= 3) showLabel('arduino', arduino, 1.9);
+      if (step >= 5) showLabel('sensor', sensor, 1.2);
+      if (step >= 7) { showLabel('servoL', servoL, 2.4); showLabel('servoR', servoR, 2.4); }
+      if (step >= 9) { showLabel('led', led, 1.0); showLabel('resistor', resistor, 1.0); }
+      if (step >= 11) showLabel('battery', battery, 2.2);
+      if (step >= 14) showLabel('chassis', chassis, 2.6);
+      if (step === 4) showLabel('power', breadboard, 2.6);
+      if (step === 6) showLabel('a0', sensor, 1.9);
+      if (step === 8) { showLabel('d9', servoL, 2.9); showLabel('d10', servoR, 2.9); }
+      if (step === 10) showLabel('d7', led, 1.8);
+      if (step === 12) showLabel('vin', battery, 2.8);
+    }
+
+    let soundLevel = 0, robotMoving = false, moveTimer = 0;
+    let robotX = 0, robotZ = 0, robotVx = 0, robotVz = 0, robotAng = 0;
+    let clapFlash = 0, speakerAlpha = 0;
+    const speakerPos = new THREE.Vector3();
+    const NB = 14;
+    const barH = new Array(NB).fill(2);
+    const mB = document.getElementById('mB');
+    for (let i = 0; i < NB; i++) {
+      const b = document.createElement('div');
+      b.className = 'm-bar'; b.style.height = '2px'; mB.appendChild(b);
+    }
+    const SND_CLAP = '';
+    const clapAudio = new Audio(SND_CLAP);
+    let audioCtx = null;
+    function playClap() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const bufferSize = Math.floor(audioCtx.sampleRate * 0.35);
+      const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 3);
+      const src = audioCtx.createBufferSource();
+      src.buffer = buffer;
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'bandpass'; filter.frequency.value = 1200; filter.Q.value = 0.8;
+      src.connect(filter); filter.connect(audioCtx.destination); src.start(0);
+    }
+
+    const clapRings = [];
+    for (let i = 0; i < 4; i++) {
+      const rm = new THREE.MeshBasicMaterial({ color: 0x22dd88, transparent: true, opacity: 0 });
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.25, 0.35, 32), rm);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = -2.75;
+      ring.visible = false;
+      scene.add(ring);
+      clapRings.push({ mesh: ring, t: 999 });
+    }
+    const speakerWaves = [];
+    for (let i = 0; i < 3; i++) {
+      const w = new THREE.Mesh(new THREE.RingGeometry(0.25, 0.33, 48), new THREE.MeshBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0 }));
+      w.rotation.x = -Math.PI / 2;
+      w.visible = false;
+      scene.add(w);
+      speakerWaves.push({ mesh: w, p: 0 });
+    }
+    let confetti = null, confettiDone = false;
+    function spawnConfetti() {
+      const n = 180;
+      const pos = new Float32Array(n * 3), col = new Float32Array(n * 3), vel = [];
+      for (let i = 0; i < n; i++) {
+        pos[i * 3 + 0] = (Math.random() - 0.5) * 8;
+        pos[i * 3 + 1] = 7 + Math.random() * 3;
+        pos[i * 3 + 2] = (Math.random() - 0.5) * 8;
+        const c = new THREE.Color().setHSL(Math.random(), 0.9, 0.55);
+        col[i * 3 + 0] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+        vel.push(new THREE.Vector3((Math.random() - 0.5) * 0.08, -0.03 - Math.random() * 0.06, (Math.random() - 0.5) * 0.08));
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      const m = new THREE.PointsMaterial({ size: 0.12, vertexColors: true, transparent: true, opacity: 1 });
+      const p = new THREE.Points(g, m);
+      scene.add(p);
+      confetti = { points: p, vel: vel, life: 1 };
+    }
+
+    function doClap(e) {
+      if (e && e.preventDefault) e.preventDefault();
+      if (step < 15 || robotMoving) return;
+      clapAudio.currentTime = 0;
+      clapAudio.play().catch(function() { playClap(); });
+      if (!SND_CLAP) playClap();
+      soundLevel = 600 + Math.random() * 350;
+      clapFlash = 1;
+      robotMoving = true;
+      moveTimer = 120;
+      const da = (Math.random() - 0.5) * 0.8;
+      robotVx = Math.cos(robotAng + da) * 0.06;
+      robotVz = Math.sin(robotAng + da) * 0.06;
+      const side = Math.floor(Math.random() * 4), r = 10;
+      if (side === 0) speakerPos.set(-r, 1, (Math.random() - 0.5) * r);
+      else if (side === 1) speakerPos.set(r, 1, (Math.random() - 0.5) * r);
+      else if (side === 2) speakerPos.set((Math.random() - 0.5) * r, 1, -r);
+      else speakerPos.set((Math.random() - 0.5) * r, 1, r);
+      speakerAlpha = 1;
+      clapRings.forEach(function(ring, i) { ring.t = i * 0.12; ring.mesh.visible = true; });
+      document.getElementById('mS').textContent = 'MOVING';
+      document.getElementById('mS').className = 'm-st mov';
+    }
+    document.addEventListener('keydown', function(e) {
+      if (e.code === 'Space') { e.preventDefault(); doClap(); }
+    });
+
+    function updateRobotTest() {
+      let dist = 0;
+      if (robotMoving) {
+        const wl = chassis.getObjectByName('wheelL'), wr = chassis.getObjectByName('wheelR');
+        robotX += robotVx;
+        robotZ += robotVz;
+        dist = Math.sqrt(robotVx * robotVx + robotVz * robotVz);
+        const wheelSpin = dist / 1.9;
+        if (wl) wl.rotation.x -= wheelSpin;
+        if (wr) wr.rotation.x += wheelSpin;
+        const lim = 8;
+        if (Math.abs(robotX) > lim) { robotVx *= -1; robotX = Math.sign(robotX) * lim; }
+        if (Math.abs(robotZ) > lim) { robotVz *= -1; robotZ = Math.sign(robotZ) * lim; }
+        robotAng = Math.atan2(robotVz, robotVx);
+        moveTimer--;
+        if (moveTimer <= 0) {
+          robotMoving = false; robotVx = 0; robotVz = 0;
+          document.getElementById('mS').textContent = 'IDLE';
+          document.getElementById('mS').className = 'm-st idle';
+        }
+        ledGlowLight.intensity += (2.0 - ledGlowLight.intensity) * 0.15;
+        const ledChild = chassis.children.find(function(c) { return c.name === 'led'; });
+        if (ledChild && ledChild.userData.lensMat) {
+          ledChild.userData.lensMat.emissiveIntensity += (1.5 - ledChild.userData.lensMat.emissiveIntensity) * 0.2;
+          const lp = new THREE.Vector3();
+          ledChild.getWorldPosition(lp);
+          ledGlowLight.position.copy(lp);
+        }
+      } else {
+        ledGlowLight.intensity += (0 - ledGlowLight.intensity) * 0.1;
+        if (led.userData.lensMat) led.userData.lensMat.emissiveIntensity += (0.25 - led.userData.lensMat.emissiveIntensity) * 0.1;
+      }
+      chassis.position.x = robotX;
+      chassis.position.z = robotZ;
+      chassis.rotation.y = -robotAng;
+      soundLevel *= 0.93;
+      if (soundLevel < 2) soundLevel = 0;
+      clapFlash *= 0.95;
+      speakerAlpha *= 0.97;
+      document.getElementById('mV').textContent = Math.round(soundLevel);
+      document.getElementById('mV').style.color = soundLevel > 500 ? '#dc2626' : soundLevel > 50 ? '#d97706' : '#059669';
+      const bs = mB.children;
+      for (let i = 0; i < bs.length; i++) {
+        const tgt = soundLevel > 5 ? (2 + Math.random() * soundLevel * 0.04) : 2;
+        barH[i] += (tgt - barH[i]) * 0.3;
+        bs[i].style.height = barH[i] + 'px';
+        bs[i].style.background = soundLevel > 500 ? '#dc2626' : '#10b981';
+      }
+      clapRings.forEach(function(ring) {
+        ring.t += 0.02;
+        if (ring.t > 1.2) { ring.mesh.visible = false; return; }
+        const s = 1 + ring.t * 10;
+        ring.mesh.visible = true;
+        ring.mesh.scale.set(s, s, s);
+        ring.mesh.position.set(robotX, -2.75, robotZ);
+        ring.mesh.material.opacity = Math.max(0, 0.55 * (1 - ring.t));
+      });
+      if (speakerAlpha > 0.01) {
+        speakerWaves.forEach(function(w, i) {
+          w.p += 0.017;
+          const waveScale = 1 + ((w.p + i * 0.35) % 1) * 11;
+          w.mesh.visible = true;
+          w.mesh.position.copy(speakerPos);
+          w.mesh.scale.set(waveScale, waveScale, waveScale);
+          w.mesh.material.opacity = 0.3 * speakerAlpha * (1 - ((w.p + i * 0.35) % 1));
+        });
+      } else {
+        speakerWaves.forEach(function(w) { w.mesh.visible = false; });
+      }
+    }
+
+    function updateStepScene(s, p) {
+      if (s === 0) {
+        const t = performance.now() * 0.00015;
+        camera.position.x = Math.cos(t) * 20;
+        camera.position.z = Math.sin(t) * 20;
+        camera.position.y = 9;
+        controls.target.set(0, 0, 0);
+      }
+      if (s === 1) {
+        const e = easeOutBounce(p);
+        breadboard.position.y = 8 + (-7.9 * e);
+      }
+      if (s === 2) breadboard.position.lerpVectors(new THREE.Vector3(0, 0.1, 0), ASSEMBLY_POS.breadboard, easeInOutCubic(p));
+      if (s === 3) {
+        const e = easeOutCubic(p);
+        arduino.position.y = -5 + (7.9 * e);
+        arduino.position.x = 0;
+        arduino.position.z = 0;
+        arduino.rotation.y += 0.01;
+      }
+      if (s === 5) {
+        const e = easeOutCubic(p);
+        sensor.position.y = 8 + (-5.4 * e);
+        sensor.position.x = 0;
+        sensor.position.z = 0;
+        sensor.rotation.y += 0.008;
+      }
+      if (s === 7) {
+        const e = easeOutCubic(p);
+        servoL.position.x = -7 + 5.8 * e;
+        servoR.position.x = 7 - 5.8 * e;
+        servoL.position.y = 3.2;
+        servoR.position.y = 3.2;
+        const horn = Math.sin(performance.now() * 0.006) * 0.35;
+        servoL.userData.hornH.rotation.y = horn;
+        servoR.userData.hornH.rotation.y = -horn;
+      }
+      if (s === 9) {
+        const e = easeOutBounce(p);
+        led.position.y = 8 - 5.4 * e;
+        resistor.position.y = 8 - 5.4 * e;
+        const pulse = 0.35 + 0.2 * Math.sin(performance.now() * 0.008);
+        if (led.userData.lensMat) led.userData.lensMat.emissiveIntensity = pulse;
+      }
+      if (s === 11) {
+        const e = easeOutCubic(p);
+        battery.position.x = -10 + 10 * e;
+        battery.position.y = 3.0;
+        battery.position.z = 0;
+        battery.rotation.y += 0.01;
+      }
+      if (s === 13) {
+        drawCodePopup(Math.floor(codeTotalChars * p));
+      }
+      if (s === 14 || s >= 15) {
+        const e = easeInOutCubic(p);
+        chassis.position.y = -4 + 4 * e;
+        const targets = { breadboard: CHASSIS_POS.breadboard, arduino: CHASSIS_POS.arduino, sensor: CHASSIS_POS.sensor, battery: CHASSIS_POS.battery, led: CHASSIS_POS.led };
+        const start = { breadboard: ASSEMBLY_POS.breadboard, arduino: ASSEMBLY_POS.arduino, sensor: ASSEMBLY_POS.sensor, battery: ASSEMBLY_POS.battery, led: ASSEMBLY_POS.led };
+        Object.keys(targets).forEach(function(k, idx) {
+          const t = Math.max(0, Math.min(1, (p - idx * 0.08) / (1 - idx * 0.08)));
+          const et = easeInOutCubic(t);
+          const obj = { breadboard: breadboard, arduino: arduino, sensor: sensor, battery: battery, led: led }[k];
+          obj.position.lerpVectors(start[k], targets[k], et);
+        });
+        servoL.position.lerpVectors(ASSEMBLY_POS.servoL, new THREE.Vector3(-6.8, 1.2, 0), e);
+        servoR.position.lerpVectors(ASSEMBLY_POS.servoR, new THREE.Vector3(6.8, 1.2, 0), e);
+        resistor.position.lerpVectors(ASSEMBLY_POS.resistor, new THREE.Vector3(0.3, 1.2, -2.0), e);
+        const wl = chassis.getObjectByName('wheelL'), wr = chassis.getObjectByName('wheelR');
+        if (s === 14 && wl && wr) { wl.rotation.x += 0.08; wr.rotation.x += 0.08; }
+      }
+      if (s === 16 && !confettiDone) {
+        confettiDone = true;
+        spawnConfetti();
+      }
+      if (s < 16) confettiDone = false;
+      if (confetti) {
+        const pa = confetti.points.geometry.attributes.position.array;
+        for (let i = 0; i < confetti.vel.length; i++) {
+          pa[i * 3 + 0] += confetti.vel[i].x;
+          pa[i * 3 + 1] += confetti.vel[i].y;
+          pa[i * 3 + 2] += confetti.vel[i].z;
+          confetti.vel[i].y -= 0.0015;
+        }
+        confetti.points.geometry.attributes.position.needsUpdate = true;
+        confetti.life -= 0.008;
+        confetti.points.material.opacity = Math.max(0, confetti.life);
+        if (confetti.life <= 0) {
+          scene.remove(confetti.points);
+          confetti.points.geometry.dispose();
+          confetti.points.material.dispose();
+          confetti = null;
+        }
+      }
+    }
+
+    function updateUI() {
+      const s = steps[step];
+      const isTest = step >= 15;
+      const b = document.getElementById('btns');
+      document.getElementById('txt').innerHTML = s.t;
+      if (isTest) {
+        b.innerHTML = '<button class="btn btn-s" onclick="prev()">←</button>'
+                    + '<button class="btn btn-clap" onmousedown="doClap()" ontouchstart="doClap(event)">👏 CLAP!</button>'
+                    + (step < maxStep ? '<button class="btn btn-s" onclick="nxt()">→</button>' : '');
+      } else {
+        b.innerHTML = (step > 0 ? '<button class="btn btn-s" onclick="prev()">←</button>' : '')
+                    + '<button class="btn btn-p" onclick="nxt()">'
+                    + (step >= maxStep ? '🎉 Done!' : 'Next →') + '</button>';
+      }
+      const d = document.getElementById('dots');
+      let dh = '';
+      for (let i = 0; i <= maxStep; i++) dh += '<div class="dot ' + (i < step ? 'done' : i === step ? 'active' : '') + '"></div>';
+      d.innerHTML = dh;
+      document.getElementById('meter').classList.toggle('show', isTest);
+    }
+    function nxt() {
+      if (step < maxStep) {
+        step++;
+        animProgress = 0;
+        updateUI();
+        setStep(step);
+      }
+    }
+    function prev() {
+      if (step > 0) {
+        step--;
+        animProgress = 0;
+        updateUI();
+        setStep(step);
+      }
+    }
+    window.nxt = nxt;
+    window.prev = prev;
+    window.doClap = doClap;
+
+    function frame() {
+      requestAnimationFrame(frame);
+      if (animProgress < 1) animProgress = Math.min(1, animProgress + ANIM_SPEED);
+      if (camAnim) camAnim();
+      controls.update();
+      wires.forEach(function(w) { w.update(0.025); });
+      updateStepScene(step, animProgress);
+      if (step >= 15) updateRobotTest();
+      updateAllLabels();
+      renderer.render(scene, camera);
+    }
+
+    updateUI();
+    setStep(0);
+    frame();
+  </script>
+</body>
+</html>
